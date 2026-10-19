@@ -9,10 +9,11 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "dotenv>=0.9.9",
-    "genai>=2.1.0",
+    "google-genai>=2.31.0",
     "numpy>=2.2.6",
     "openpyxl>=3.1.5",
     "pandas>=2.3.3",
+    "pyarrow>=25.0.1",
     "typer>=0.27.3",
 ]
 

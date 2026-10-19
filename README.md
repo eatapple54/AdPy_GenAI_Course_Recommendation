@@ -2,7 +2,7 @@
 
 Final course project for **Advanced Python with AI**. The goal is to recommend course packages based on a learner's goals, skill needs, experience, and constraints.
 
-The project currently imports and preprocesses course catalogs for future embedding and retrieval. Embedding generation, vector storage, user-feature extraction, ranking, and package assembly are planned work.
+The project currently preprocesses course catalogs, embeds each course with Gemini, and supports similarity search over the saved vectors. User-feature extraction, ranking, and package assembly are planned work.
 
 ## Project structure
 
@@ -12,7 +12,7 @@ AdPy_GenAI_Course_Recommendation/
 │   └── fordham_course.xlsx          # Source course catalog
 ├── scripts/
 │   ├── preprocessing.py            # Data import, cleaning, and CLI
-│   ├── emb.py                      # Placeholder for embedding generation
+│   ├── emb.py                      # Gemini embeddings, storage, and search
 │   └── main.py                     # Placeholder for the application workflow
 ├── src/
 │   └── adpy_genai_course_recommendation/
@@ -41,7 +41,7 @@ Dependencies are declared in `pyproject.toml`, with exact resolved versions in `
 uv add package-name
 ```
 
-The preprocessing workflow uses pandas, openpyxl, and Typer. It does not require API credentials.
+The preprocessing workflow uses pandas, openpyxl, and Typer and does not require API credentials. Embedding uses `google-genai`, `python-dotenv`, NumPy, and PyArrow, and requires a Gemini API key.
 
 ## Dataset
 
@@ -81,7 +81,7 @@ Preprocessed fordham_course.xlsx: 1619 courses retained; 0 untitled or duplicate
 fordham_course.xlsx: 1619 courses processed.
 ```
 
-**The CLI prints processing counts. It does not save cleaned data, generate embeddings, or modify the source workbook.**
+**The preprocessing CLI prints processing counts. It does not save cleaned data or modify the source workbook.**
 
 ### What preprocessing does
 
@@ -122,7 +122,36 @@ print(courses[["course_id", "course_name", "difficulty_level"]].head())
 print(courses["embedding_text"].iloc[0])
 ```
 
-Both functions return dictionaries mapping filenames to DataFrames. Use `embedding_text` as the input to a future embedding model; retain course IDs and metadata alongside the resulting vectors.
+Both functions return dictionaries mapping filenames to DataFrames. `scripts/emb.py` uses `embedding_text` as its embedding input.
+
+## Generate embeddings
+
+`scripts/emb.py` embeds each course's `embedding_text` with Gemini (`gemini-embedding-001`, 768 dimensions, normalized to unit length) and saves the results to `data/embeddings/`:
+
+| File | Contents |
+| --- | --- |
+| `<catalog>_vectors.npy` | One row per course: an N × 768 float32 matrix |
+| `<catalog>_meta.parquet` | Course ID, name, provider, difficulty, hours, rating, URL, languages, skills, and embedding text, in the same row order as the vectors |
+
+Put your Gemini API key in `env_vars.env` or `.env` in the project root (both are git-ignored):
+
+```text
+GEMINI_API_KEY=your-key-here
+```
+
+Build the embeddings (about 1,600 API inputs for the included catalog, sent in batches of 50 with automatic retries):
+
+```powershell
+uv run scripts/emb.py build fordham_course.xlsx
+```
+
+Search the saved embeddings:
+
+```powershell
+uv run scripts/emb.py search "machine learning with python" --difficulty beginner --max-hours 20
+```
+
+Courses are embedded with task type `RETRIEVAL_DOCUMENT` and queries with `RETRIEVAL_QUERY`. Because vectors are unit length, a dot product gives cosine similarity.
 
 ## Planned recommendation workflow
 
@@ -135,7 +164,7 @@ Both functions return dictionaries mapping filenames to DataFrames. Use `embeddi
 
 Difficulty, duration, and language should support filtering and package selection. Ratings, enrollment counts, URLs, and identifiers remain metadata rather than embedding content. Both duration fields are preserved separately; their definitions need to be confirmed before choosing a package time estimate.
 
-Only the preprocessing stage is currently implemented. `scripts/emb.py` describes an intended Gemini embedding workflow but contains no implementation. The installed project command currently prints a greeting.
+Preprocessing (step 1) and embedding with similarity search (step 2) are implemented. The installed project command currently prints a greeting.
 
 ## Current limitations
 
@@ -143,4 +172,5 @@ Only the preprocessing stage is currently implemented. `scripts/emb.py` describe
 - Non-numeric text in numeric columns currently raises a conversion error; numeric fields should contain numbers or missing values.
 - The importer also accepts `.xls` extensions, but legacy Excel files may need an additional reader such as `xlrd`, which is not currently declared.
 - Conflict detection applies within each catalog; cross-catalog deduplication is not implemented.
-- Cleaned-data export, embedding model configuration, vector storage, retrieval evaluation, and package templates are not implemented yet.
+- Embeddings are rebuilt from scratch on each `build` run; there is no incremental update.
+- Cleaned-data export, retrieval evaluation, and package templates are not implemented yet.
