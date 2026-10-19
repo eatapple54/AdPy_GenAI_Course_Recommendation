@@ -157,7 +157,7 @@ def preprocess_data(data_dic: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame
                 valid = valid & (values <= maximum)
 
             if 'hours' in column:
-                valid = valid & values > 0
+                valid = valid & (values > 0)
 
             cleaned[column] = values.where(valid)
 
